@@ -61,8 +61,14 @@ public class WebIntent extends CordovaPlugin {
                         extrasMap.put(key, value);
                     }
                 }
-
-                startActivity(obj.getString("action"), uri, type, extrasMap);
+                String packageName = obj.has("packageName") ? obj.getString("packageName") : null;
+                String className = obj.has("className") ? obj.getString("className") : null;
+                if(packageName!=null&&className!=null){
+                    startActivity(packageName, className, obj.getString("action"), uri, type, extrasMap);
+                } else {
+                    //compat for all old cases
+                    startActivity(obj.getString("action"), uri, type, extrasMap);
+                }
                 //return new PluginResult(PluginResult.Status.OK);
                 callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK));
                 return true;
@@ -188,7 +194,39 @@ public class WebIntent extends CordovaPlugin {
             this.onNewIntentCallbackContext.sendPluginResult(result);
         }
     }
+    void startActivity(String packageName, String className, String action, Uri uri, String type, Map<String, String> extras) {
+            Intent i = (uri != null ? new Intent(action, uri) : new Intent(action));
+            if(packageName !=null && className != null){
+                i.setClassName(packageName, className);
+            }
 
+            if (type != null && uri != null) {
+                i.setDataAndType(uri, type); //Fix the crash problem with android 2.3.6
+            } else {
+                if (type != null) {
+                    i.setType(type);
+                }
+            }
+
+            for (String key : extras.keySet()) {
+                String value = extras.get(key);
+                // If type is text html, the extra text must sent as HTML
+                if (key.equals(Intent.EXTRA_TEXT) && type.equals("text/html")) {
+                    i.putExtra(key, Html.fromHtml(value));
+                } else if (key.equals(Intent.EXTRA_STREAM)) {
+                    // allowes sharing of images as attachments.
+                    // value in this case should be a URI of a file
+                    final CordovaResourceApi resourceApi = webView.getResourceApi();
+                    i.putExtra(key, resourceApi.remapUri(Uri.parse(value)));
+                } else if (key.equals(Intent.EXTRA_EMAIL)) {
+                    // allows to add the email address of the receiver
+                    i.putExtra(Intent.EXTRA_EMAIL, new String[] { value });
+                } else {
+                    i.putExtra(key, value);
+                }
+            }
+            ((CordovaActivity)this.cordova.getActivity()).startActivity(i);
+        }
     void startActivity(String action, Uri uri, String type, Map<String, String> extras) {
         Intent i = (uri != null ? new Intent(action, uri) : new Intent(action));
 
